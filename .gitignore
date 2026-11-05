@@ -1,0 +1,12 @@
+# Sweep output folders
+sweeps/
+*_sweep/
+
+# Test images and their results
+tests/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
