@@ -22,7 +22,8 @@ from .relax import initial_points, jitter_points, lloyd_relax
 # Everything else (dot size, jitter, lines, output size) is applied at render
 # time, so sweeping those options reuses the relaxed dots.
 DENSITY_KEYS = ("gamma", "contrast", "blur", "invert", "sharpen", "white_cutoff",
-                "simplify", "simplify_passes", "levels", "points", "work_size")
+                "simplify", "simplify_passes", "levels", "points", "work_size",
+                "focus", "focus_local")
 POINTS_KEYS = DENSITY_KEYS + ("iterations", "seed", "lines_only")
 
 
@@ -31,7 +32,7 @@ def make_density(a):
     density, orig_size = load_density(a.input, a.work_size, a.gamma, a.contrast,
                                       a.blur, a.invert, a.sharpen, a.white_cutoff,
                                       a.simplify, a.simplify_passes, a.levels,
-                                      a.points)
+                                      a.points, a.focus, a.focus_local)
     return SimpleNamespace(density=density, orig_size=orig_size, line_cache={})
 
 
@@ -138,4 +139,10 @@ def validate(a):
     need(a.min_line_length >= 0, "--min-line-length must be >= 0")
     need(a.line_width is None or a.line_width > 0, "--line-width must be > 0")
     need(a.line_gap is None or a.line_gap >= 0, "--line-gap must be >= 0")
+    if a.focus and a.focus.strip().lower() != "select":
+        from .focus import parse_spec
+        try:
+            parse_spec(a.focus)
+        except ValueError as e:
+            errs.append(str(e))
     return errs

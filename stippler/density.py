@@ -51,7 +51,7 @@ def load_grey(path):
 
 def load_density(path, work_size, gamma, contrast, blur, invert, sharpen=0.0,
                  white_cutoff=0.0, simplify_radius=0.0, simplify_passes=2,
-                 levels=0, n_points=None):
+                 levels=0, n_points=None, focus=None, focus_local=False):
     """Load image, convert to greyscale and return a density map in [0, 1]."""
     grey = load_grey(path)
     orig_size = grey.size
@@ -79,18 +79,36 @@ def load_density(path, work_size, gamma, contrast, blur, invert, sharpen=0.0,
         # Unsharp mask boosts edges/local contrast so outlines survive as dots.
         grey = grey.filter(ImageFilter.UnsharpMask(
             radius=max(2, grey.width // 200), percent=int(sharpen * 100), threshold=2))
-    if contrast > 0:
-        grey = ImageOps.autocontrast(grey, cutoff=1)
-
     lum = np.asarray(grey, dtype=np.float64) / 255.0
-    if contrast > 0:
-        lum = s_curve(lum, contrast)
+    if focus:
+        # Meter black/white point and mid-tone on the focus region only.
+        from .focus import feather, metered_levels, region_mask
+        mask = region_mask(focus, lum.shape, orig_size)
+        mapped = metered_levels(lum, mask > 0.5)
+        if contrast > 0:
+            mapped = s_curve(mapped, contrast)
+        if focus_local:
+            base = global_contrast(lum, contrast)
+            blend = feather(mask)
+            mapped = blend * mapped + (1.0 - blend) * base
+        lum = mapped
+    else:
+        lum = global_contrast(lum, contrast)
     density = lum if invert else 1.0 - lum
     density = np.clip(density, 0.0, 1.0) ** gamma
     if white_cutoff > 0:
         # Light tones below the cutoff become pure white paper; rescale the rest.
         density = np.clip((density - white_cutoff) / (1.0 - white_cutoff), 0.0, 1.0)
     return density, orig_size
+
+
+def global_contrast(lum, contrast):
+    """Default tone mapping: autocontrast (1% clip) + S-curve."""
+    if contrast <= 0:
+        return lum
+    lo, hi = np.percentile(lum, [1, 99])
+    lum = np.clip((lum - lo) / max(hi - lo, 1e-3), 0.0, 1.0)
+    return s_curve(lum, contrast)
 
 
 def s_curve(x, strength):

@@ -81,6 +81,28 @@ Edges are found with OpenCV (bilateral smoothing → Canny with adaptive
 thresholds) and traced into single-stroke smoothed polylines, which are also
 written to the SVG as real paths.
 
+## Focus region
+
+Optimise the contrast for one part of the image: its black point, white point
+and mid-tone are measured on that region only, so its tones use the full range
+of dot densities.
+
+```
+python stipple.py photo.jpg --focus select                 # drag a box on the image
+python stipple.py photo.jpg --focus 0.3,0.2,0.6,0.7        # box x0,y0,x1,y1 (fractions or pixels)
+python stipple.py photo.jpg --focus mask.png               # painted mask, white = region
+python stipple.py photo.jpg --focus select --focus-local   # only boost the region
+```
+
+- `--focus select` prints the box it used, so you can repeat it with the same values.
+- Default: the whole image gets the region-optimised tone curve (other areas
+  may go very light or very dark). `--focus-local` applies it only in and
+  softly around the region; the rest keeps the normal contrast.
+- Combines with `-c` (S-curve strength on top of the region-metered levels).
+- In sweeps, separate several focus values with `;` (boxes contain commas):
+  `--focus "none;0.3,0.2,0.6,0.7;mask.png" --focus-local no,yes`.
+  `select` is asked once, before the sweep starts.
+
 ## Project layout
 
 ```
@@ -94,5 +116,6 @@ stippler/
   relax.py            stage 2: dot seeding, Lloyd relaxation, jitter
   drawing.py          stage 3: dot sizing, PNG/SVG output
   lines.py            outline detection for line mode
+  focus.py            focus region: parsing, interactive selection, metering
 sweeps/, tests/       outputs and test images (git-ignored)
 ```

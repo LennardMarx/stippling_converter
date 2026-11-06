@@ -68,6 +68,14 @@ def build_parser():
                    help="optional: remove dots that come within this margin of a "
                         "line, in dot spacings (0 = only dots touching a line). "
                         "Default: off, lines are simply drawn on top of the dots")
+    f = p.add_argument_group("focus region")
+    f.add_argument("--focus", default=None,
+                   help="optimise contrast for one region: 'select' (drag a box on "
+                        "the image), a box x0,y0,x1,y1 (fractions 0-1 or pixels), "
+                        "or a mask image (white = region)")
+    f.add_argument("--focus-local", action="store_true",
+                   help="apply the focus contrast only in/around the region; the "
+                        "rest keeps the normal contrast (default: whole image)")
     p.add_argument("-j", "--jitter", type=float, default=0.25,
                    help="randomly offset each dot by up to this fraction of the "
                         "distance to its neighbour; breaks up the regular "
@@ -82,6 +90,10 @@ def main(argv=None):
     """Stipple a single image."""
     parser = build_parser()
     a = parser.parse_args(argv)
+    if a.focus and a.focus.strip().lower() == "select":
+        from .focus import select_region
+        a.focus = select_region(a.input)
+        print(f"Focus region: --focus {a.focus}", file=sys.stderr)
     errs = pipeline.validate(a)
     if errs:
         parser.error("; ".join(errs))

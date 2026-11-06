@@ -16,6 +16,7 @@ output scale defaults to 1 and the seed to 1 (so results are comparable).
 import argparse
 import csv
 import itertools
+import re
 import sys
 import time
 from pathlib import Path
@@ -25,7 +26,8 @@ from PIL import Image, ImageDraw, ImageFont
 from . import cli, pipeline
 
 SKIP = {"help", "input", "output", "quiet"}
-NONE_LABEL = {"line_gap": "off"}  # what an unset value means, for file names
+NONE_LABEL = {"line_gap": "off", "focus": "off"}
+LIST_SEP = {"focus": ";"}  # focus boxes contain commas, so list them with ;  # what an unset value means, for file names
 SWEEP_ROOT = Path(__file__).resolve().parent.parent / "sweeps"
 SWEEP_DEFAULTS = {"scale": 1.0, "seed": 1}
 SHORT = {"points": "n", "iterations": "i", "dot_radius": "r", "contrast": "c",
@@ -75,6 +77,11 @@ def label(name, value):
         return key if value else f"no-{key}"
     if value is None:
         return f"{key}-{NONE_LABEL.get(name, 'auto')}"
+    if name == "focus":  # boxes have commas, masks are paths -> file-name safe
+        from .focus import BOX_RE
+        if BOX_RE.match(str(value)):
+            return key + "-".join(re.split(r"\s*[,:]\s*", str(value).strip()))
+        return f"{key}-{Path(value).stem}"
     if isinstance(value, float):
         value = f"{value:g}"
     return f"{key}{value}"
@@ -124,7 +131,7 @@ def main(argv=None):
         try:
             nones = ("auto", "none") if conv is parse_bool else ("auto", "none", "off")
             vals = [None if v.strip().lower() in nones else conv(v)
-                    for v in raw.split(",") if v.strip()]
+                    for v in raw.split(LIST_SEP.get(name, ",")) if v.strip()]
         except (ValueError, argparse.ArgumentTypeError) as e:
             p.error(f"--{name.replace('_', '-')}: {e}")
         vals = list(dict.fromkeys(vals))  # dedupe, keep order
@@ -140,6 +147,17 @@ def main(argv=None):
 
     # Check every combination before doing any work, so a bad value doesn't
     # crash the sweep halfway through.
+    # Interactive focus selection happens once, before the sweep.
+    if "focus" in fixed and str(fixed["focus"]).strip().lower() == "select":
+        from .focus import select_region
+        fixed["focus"] = select_region(a.input)
+        print(f"Focus region: --focus {fixed['focus']}", file=sys.stderr)
+    if "focus" in swept:
+        from .focus import select_region
+        swept["focus"] = [select_region(a.input) if str(v).lower() == "select" else v
+                          for v in swept["focus"]]
+        combos = [dict(zip(names, vals)) for vals in itertools.product(*swept.values())]
+
     problems = sorted({e for combo in combos for e in pipeline.validate(settings(combo))})
     if problems:
         p.error("invalid settings in the sweep: " + "; ".join(problems))
